@@ -1,2 +1,1 @@
-msync-lib.jar
-verizon.net.sip.jar
+
