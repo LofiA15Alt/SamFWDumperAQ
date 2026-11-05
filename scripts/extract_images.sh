@@ -68,18 +68,36 @@ rm -f "firmware.zip"
 echo "✅ Done"
 
 echo ""; echo "[3/5] Extracting AP..."
-AP_FILE=$(find . -name "AP_*.tar.md5" -o -name "AP_*.tar" | head -n 1)
+AP_FILE=$(find . \( -name "AP_*.tar.md5" -o -name "AP_*.tar" \) | head -n 1)
 [ -z "$AP_FILE" ] && { echo "❌ AP file not found"; exit 1; }
 echo "  Extracting: $(basename "$AP_FILE")"
 
+# Android 9 = no super partition, no A/B slots.
+# Files look like: system.img.ext4, system.img.ext4.lz4, boot.img.lz4, vendor.img.ext4 ...
 EXTRACT_ARGS=()
 for PART in $SELECTED_PARTITIONS; do
-  EXTRACT_ARGS+=("*${PART}.img*" "*${PART}_a.img*" "*${PART}_b.img*")
+  EXTRACT_ARGS+=("${PART}.img*")
 done
-$NEED_SUPER && EXTRACT_ARGS+=("*super.img*")
 
-tar --no-anchored --wildcards -xf "$AP_FILE" "${EXTRACT_ARGS[@]}" 2>/dev/null || tar -xf "$AP_FILE" >/dev/null 2>&1
+if ! tar --wildcards -xf "$AP_FILE" "${EXTRACT_ARGS[@]}" 2>/dev/null; then
+  echo "  ⚠ Selective extract failed, extracting everything..."
+  tar -xf "$AP_FILE" >/dev/null 2>&1 || { echo "❌ Extraction failed"; exit 1; }
+fi
 rm -f "$AP_FILE"
+
+# Decompress lz4 images (common on older Samsung firmware)
+for F in *.lz4; do
+  [ -e "$F" ] || continue
+  echo "  Decompressing: $F"
+  lz4 -d -f "$F" "${F%.lz4}" >/dev/null 2>&1 && rm -f "$F" || echo "  ⚠ Failed: $F"
+done
+
+# Normalize names: system.img.ext4 -> system.img
+for F in *.img.ext4; do
+  [ -e "$F" ] || continue
+  mv -f "$F" "${F%.ext4}"
+done
+
 echo "✅ Done"
 
 echo ""; echo "[4/5] Extracting partitions..."
